@@ -1,0 +1,82 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: corpaliv-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Root_Corpaliv_Local_2026}
+      MYSQL_USER: corpaliv
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Corpaliv_Local_2026}
+      MYSQL_DATABASE: bd_corpaliv_auth
+    ports:
+      - "3308:3306"
+    volumes:
+      - corpaliv_mysql_data:/var/lib/mysql
+      - ./db/init/01-databases.sql:/docker-entrypoint-initdb.d/01-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  auth-service:
+    build: ./auth-service
+    container_name: corpaliv-auth
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 9094
+      DB_URL: jdbc:mysql://mysql:3306/bd_corpaliv_auth?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USER: corpaliv
+      DB_PASSWORD: ${MYSQL_PASSWORD:-Corpaliv_Local_2026}
+      APP_JWT_SECRET: ${JWT_SECRET:-Corpaliv_JWT_Secret_Change_Before_Production_2026}
+      GESTOR_EMAIL: ${GESTOR_EMAIL:-gestor@albalab.cl}
+      GESTOR_PASSWORD: ${GESTOR_PASSWORD:-GestorDemo2026!}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  contenidos-service:
+    build: ./contenidos-service
+    container_name: corpaliv-contenidos
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 9091
+      DB_URL: jdbc:mysql://mysql:3306/bd_corpaliv_contenidos?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USER: corpaliv
+      DB_PASSWORD: ${MYSQL_PASSWORD:-Corpaliv_Local_2026}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  vinculacion-service:
+    build: ./vinculacion-service
+    container_name: corpaliv-vinculacion
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 9092
+      DB_URL: jdbc:mysql://mysql:3306/bd_corpaliv_vinculacion?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USER: corpaliv
+      DB_PASSWORD: ${MYSQL_PASSWORD:-Corpaliv_Local_2026}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: corpaliv-gateway
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    environment:
+      SERVER_PORT: 9090
+      APP_JWT_SECRET: ${JWT_SECRET:-Corpaliv_JWT_Secret_Change_Before_Production_2026}
+      AUTH_URL: http://auth-service:9094
+      CONTENIDOS_URL: http://contenidos-service:9091
+      VINCULACION_URL: http://vinculacion-service:9092
+    depends_on:
+      - auth-service
+      - contenidos-service
+      - vinculacion-service
+
+volumes:
+  corpaliv_mysql_data:
